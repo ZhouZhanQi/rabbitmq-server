@@ -893,6 +893,7 @@ start(normal, []) ->
 
         ok = rabbit_boot_steps:run_boot_steps([rabbit | Plugins]),
         run_postlaunch_phase(Plugins),
+        rabbit_boot_state:set(core_started),
         {ok, SupPid}
     catch
         throw:{error, _} = Error ->
