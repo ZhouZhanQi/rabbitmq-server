@@ -926,21 +926,6 @@ do_run_postlaunch_phase(Plugins) ->
         rabbit_log_prelaunch:info("Resetting node maintenance status"),
         _ = rabbit_maintenance:unmark_as_being_drained(),
 
-        %% Export definitions after all plugins have been enabled,
-        %% see rabbitmq/rabbitmq-server#2384
-        case rabbit_definitions:maybe_load_definitions() of
-            ok           -> ok;
-            DefLoadError -> throw(DefLoadError)
-        end,
-
-        %% The node is ready: mark it as such and log it.
-        %% NOTE: PLEASE DO NOT ADD CRITICAL NODE STARTUP CODE AFTER THIS.
-        %% TODO @dumbbell
-        %% rabbitmq/rabbitmq-server#2656
-        %% gotthardp/rabbitmq-email#42
-        rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
-        rabbit_boot_state:set(ready),
-
         rabbit_log_prelaunch:debug(""),
         rabbit_log_prelaunch:debug("== Plugins (postlaunch phase) =="),
 
@@ -957,16 +942,28 @@ do_run_postlaunch_phase(Plugins) ->
                   end
           end, Plugins),
 
+        %% Export definitions after all plugins have been enabled,
+        %% see rabbitmq/rabbitmq-server#2384.
+        case rabbit_definitions:maybe_load_definitions() of
+            ok           -> ok;
+            DefLoadError -> throw(DefLoadError)
+        end,
+
         %% Start listeners after all plugins have been enabled,
         %% see rabbitmq/rabbitmq-server#2405.
         rabbit_log_prelaunch:info(
           "Ready to start client connection listeners"),
         ok = rabbit_networking:boot(),
 
+        %% The node is ready: mark it as such and log it.
+        %% NOTE: PLEASE DO NOT ADD CRITICAL NODE STARTUP CODE AFTER THIS.
         ok = rabbit_lager:broker_is_started(),
         ActivePlugins = rabbit_plugins:active(),
         StrictlyPlugins = rabbit_plugins:strictly_plugins(ActivePlugins),
-        ok = log_broker_started(StrictlyPlugins)
+        ok = log_broker_started(StrictlyPlugins),
+
+        rabbit_log_prelaunch:debug("Marking ~s as running", [product_name()]),
+        rabbit_boot_state:set(ready)
     catch
         throw:{error, _} = Error ->
             rabbit_prelaunch_errors:log_error(Error),
